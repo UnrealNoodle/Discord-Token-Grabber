@@ -59,7 +59,7 @@ def main():
 
     output = ''
     if len(valid_tokens) > 0:
-        output += 'Discord Tokens:\n```\n'
+        output += 'Discord Token:\n```\n'
         for token in valid_tokens:
             output += f'{token}\n'
         output += '```'
